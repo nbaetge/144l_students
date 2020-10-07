@@ -20,6 +20,7 @@ library(readxl)
 
 excel_sheets("2013_2019_CALFIRE_Redbook.xlsx")
 
-calfire.metadata <- read_excel("2013_2019_CALFIRE_Redbook.xlsx")
+calfire.metadata <- read_excel("2013_2019_CALFIRE_Redbook.xlsx", sheet="Metadata")
 
+calfire.data <- read_excel("Input_Data/week1/2013_2019_CALFIRE_Redbook.xlsx", sheet=2)
 
