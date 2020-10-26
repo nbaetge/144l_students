@@ -1,0 +1,127 @@
+---
+title: "Cal Fire Progressiom"
+author: "Kerri Luttrell"
+date: "10/19/2020"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(readxl)
+library(lubridate)
+library(car)
+library(nlme)
+library(RColorBrewer)
+setwd("~/Github/144l_students/Input_Data/week1")
+
+```
+
+## Load Data
+```{r data}
+calfire.data <- read_excel("2013_2019_CALFIRE_Redbook.xlsx", sheet="Data")
+```
+
+```{r,include=FALSE}
+socal.fires <- calfire.data %>% 
+  select(County_Unit:Controlled_Date, Total_Acres_Burned:Civil_Fatalities) %>% 
+  filter(County_Unit
+         %in% c('SANTA BARBARA',"VENTURA","LOS ANGELES", 'ORANGE', 'SAN DIEGO') & Total_Acres_Burned >= 500 | Fire_Name=="THOMAS" ) %>% 
+  arrange(desc(Start_Date), (Total_Acres_Burned)) %>% 
+  mutate_at(vars(Structures_Destroyed:Civil_Fatalities), replace_na, 0) %>% 
+  mutate(Fatalies
+         = Fire_Fatalities + Civil_Fatalities) %>% 
+  mutate(interv = interval
+         (Start_Date, Controlled_Date),
+         dur= as.duration(interv),
+         days= as.numeric(dur, "days"))
+
+```
+## Make Plot Dataframe
+```{r}
+plot.data <- socal.fires %>%
+  rename(county = County_Unit,
+         fire = Fire_Name,
+         start = Start_Date,
+         end = Controlled_Date,
+         acres = Total_Acres_Burned,
+         cause= Cause) %>%
+  mutate (county = ifelse(fire == "THOMAS", "VENTURA", county),
+          year= year(start))
+```
+
+```{r, include=F}
+glimpse(plot.data)
+```
+
+## Plot
+
+```{r, include=FALSE}
+summary.data <-  plot.data %>%
+  group_by(county) %>%
+  summarize(total_acres= sum (acres))%>%
+  arrange (desc(total_acres))%>%
+  ungroup()
+
+#view(summary.data)
+```
+
+```{r, include=FALSE}
+county_year_data <-  plot.data %>%
+  group_by(county, year) %>%
+  summarize(total_acres= sum (acres))%>%
+  arrange (desc(year), desc(total_acres))%>%
+  ungroup()
+
+#view(county_year_data)
+```
+
+```{r, include= FALSE}
+ggplot(summary.data, aes(county, total_acres))+
+  geom_col()+
+  labs(x="County", y= "Total Acres Burned")+
+  theme_bw()+
+  coord_flip()
+  
+```
+
+```{r, include= FALSE}
+summary_factor <- summary.data %>%
+  mutate(county = factor(county, levels = county))
+
+ggplot(summary_factor, aes(county, total_acres))+
+  geom_col(aes(fill=county))+
+  labs(x="County", y= "Total Acres Burned", title= "Total Acres Burned")+
+  scale_fill_brewer(palette = "Spectral")+
+  theme_bw()+
+  coord_flip()+
+  guides (fill=F)
+  
+```
+
+```{r}
+my.summary.data <-  plot.data %>%
+  group_by(county, days, Veg_Type) %>%
+  summarise(total_acres= sum (acres))%>%
+  arrange (desc(days), desc(total_acres))%>%
+  ungroup()
+```
+
+```{r, include=FALSE}
+view(my.summary.data)
+```
+
+```{r}
+
+ggplot(my.summary.data, aes(county, days))+
+  geom_boxplot(aes(fill=county))+
+  labs(x="County", y= "Average Duration (days)", title= "Average Duration of Fires by County")+
+  scale_fill_brewer(palette = "YlOrRd")+
+  theme_bw()+
+  coord_flip()+
+  guides (fill=F)
+
+  
+```
