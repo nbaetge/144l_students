@@ -48,7 +48,7 @@ toc <- joined %>%
   ungroup() %>% 
   rename(sd_TOC = TOC_sd,
          sd_PTOC = PTOC_sd) %>%
-  select(Experiment:Datetime, hours, days, everything(), -interv)
+  select(Experiment:Datetime, hours, days, everything(), -c(contains("Sample"), interv))
 
 ```
 
@@ -78,7 +78,7 @@ glimpse(pivoted)
 
 ## Plot 
 
-```{r}
+```{r }
 custom.colors <- c("Control" = "#377EB8", "Ash Leachate" = "#4DAF4A", "Santa Barbara" = "#E41A1C", "San Diego" = "#FF7F00", "Vial" = "#377EB8", "Bottle" = "#E41A1C")
 levels <- c("Control", "Ash Leachate", "San Diego", "Santa Barbara", "Bottle", "Vial")
 
@@ -139,8 +139,8 @@ reg.data %>%
   ggplot(aes(x = TOC, y = PTOC)) +
   geom_errorbar(aes(ymin = PTOC - sd_PTOC, ymax = PTOC + sd_PTOC), width = 0.05) +
   # geom_errorbarh(aes(xmin = TOC - sd_TOC, xmax = PTOC + sd_PTOC), width = 0.05) +
-  geom_point(shape = 21, size = 4, alpha = 0.7) +
-  geom_abline(intercept = intercept, slope = slope, color = "black", linetype = 2, size = 1) +
+  geom_point(fill = "white", shape = 21, size = 4, alpha = 0.7) +
+  geom_abline(intercept = intercept, slope = slope, linetype = 2, size = 1) +
   geom_abline(intercept = two_int, slope = two_slope, color = "black", linetype = 3, size = 1) +
   geom_abline(intercept = nine_int, slope = nine_slope, color = "black", linetype = 3, size = 1) +
   labs(x = expression("Bottle TOC, µmol C L"^-1), y = expression("Vial TOC, µmol C L"^-1)) +
@@ -154,11 +154,15 @@ reg.data %>%
 bc <- read_rds("~/GITHUB/144l_students/Output_Data/week3/ACIDD_Exp_Processed_BactAbund.rds")
 
 merge <- left_join(toc, bc) %>% 
+  select(Experiment:days, TOC:sd_PTOC, cells:diff_ln_cells, bc, ave_bc, sd_bc, everything(), -c(contains("Sample")) ) %>% 
   group_by(Experiment, Treatment, Bottle) %>% 
-  fill(exp_start:delta_cells, delta_bc:sd_lag) %>% 
+  fill(exp_start:sd_lag) %>% 
   ungroup()
 
 glimpse(merge)
+
+subset <- merge %>% 
+  select(Experiment, Treatment, Bottle, days, PTOC, bc)
 
 ```
 
@@ -227,13 +231,13 @@ doc <- interpolated %>%
   group_by(Experiment, Bottle) %>% 
   mutate(bioav_doc = (first(doc) - last(na.omit(doc))) / first(doc), 
          doc_exp_end = ifelse(Timepoint == exp_end, doc, NA),
-         delta_doc = first(doc) - doc_exp_end,
-         tdelta_doc = first(doc) - last(na.omit(doc)), 
+         delta_doc = first(doc) - doc_exp_end, 
+         tdelta_doc = first(doc) - last(na.omit(doc)),
          bge = ifelse(delta_doc > 1.5, delta_bc/delta_doc, NA)) %>% 
   fill(doc_exp_end:bge, .direction = "downup") %>% 
   ungroup()
-  
-  
+
+glimpse(doc)
 ```
 
 # Treatment averages
@@ -267,7 +271,7 @@ glimpse(subset)
 
 # Plot treatment curves (TOC)
 
-```{r fig.height=4, fig.width=4}
+```{r fig.height=4, fig.width=6}
 averages %>% 
   filter(Location == "Santa Barbara") %>% 
   mutate(Treatment = factor(Treatment, levels = levels)) %>% 
@@ -280,7 +284,7 @@ averages %>%
   scale_fill_manual(values = custom.colors) +
   labs(x = "Days", y = expression("Total Organic Carbon, µmol C L"^-1), color = "", fill = "") +
   theme_bw() +
-  facet_grid(rows = "Treatment", scales = "free") + 
+ # facet_grid(rows = "Treatment", scales = "free") + 
   guides(color = F)
 
 ```
@@ -302,9 +306,8 @@ ggplot(aes(x = factor(Treatment, levels = levels), y =  ave_bioav_doc, group = i
   geom_col( color = "black", fill = "white", alpha = 1) +
   geom_errorbar(aes(ymin = ave_bioav_doc - sd_bioav_doc, ymax = ave_bioav_doc + sd_bioav_doc), width = 0.1, size = 0.5) +
   labs(x = "", y = expression(paste("Bioavailable DOC Fraction")), color = "") +
-  theme_bw() +
-  #facet_grid(~factor(Location, levels = levels), scales = "free") +
-  guides(fill = F) 
+  theme_bw() 
+  #facet_grid(~factor(Location, levels = levels), scales = "free") 
 ```
 
 ```{r}

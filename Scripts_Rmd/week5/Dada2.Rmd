@@ -1,0 +1,131 @@
+---
+title: "DADA2"
+author: "Nicholas Baetge"
+date: "10/27/2020"
+output: github_document
+---
+
+This script processes trimmed (w/o primers) sequences through the [DADA2 pipline (v 1.16)](https://benjjneb.github.io/dada2/tutorial.html), which can be installed following these [steps](https://benjjneb.github.io/dada2/dada-installation.html) 
+
+# Install and Load DADA2 and ShortRead from Bioconductor
+
+```{r}
+# if (!requireNamespace("BiocManager", quietly = TRUE))
+#     install.packages("BiocManager")
+# BiocManager::install("dada2", version = "3.11")
+# BiocManager::install("ShortRead")
+```
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(dada2)
+library(ShortRead)
+```
+
+# Import file names
+
+```{r}
+path <- "~/GITHUB/144l_students/Input_Data/week5/ACIDD_Remin_fastq"
+
+#store the names of the forward and rev files as lists
+fnFs <- list.files(path, pattern = "_R1_001.fastq", full.names = TRUE)
+fnRs <- list.files(path, pattern = "_R2_001.fastq", full.names = TRUE)
+
+```
+
+# Filter out all sequences with ambiguous base calls
+
+This part looks at the raw sequencing reads and removes reads with (ambiguous base calls (i.e. N))[https://www.bioinformatics.org/sms/iupac.html]. The subsequent workflow can’t filter out primers properly if reads have “N” bases in them.
+
+```{r}
+# Put N-filtered files in filtN/ subdirectory
+fnFs.filtN <- file.path(path, "filtN", basename(fnFs)) 
+fnRs.filtN <- file.path(path, "filtN", basename(fnRs))
+
+#filter out any reads that contain "N" in the sequence (search IUPAC ambiguity codes for descriptions)
+filterAndTrim(fwd = file.path(fnFs), filt = fnFs.filtN, rev = file.path(fnRs), filt.rev = fnRs.filtN, maxN = 0)
+
+```
+
+
+# Retrieve orientation of primers
+
+The primers targeted the V4 region and are known 514F-Y and 806RB primers (see Apprill et al., 2015)[http://www.int-res.com/articles/ame_oa/a075p129.pdf]
+
+```{r}
+#store the  forward and reverse primers
+FWD = "GTGYCAGCMGCCGCGGTAA"
+REV = "GGACTACNVGGGTWTCTAAT"
+
+#now store all the orientations of your forward and reverse  primers
+allOrients <- function(primer) {
+  # The Biostrings works w/ DNAString objects rather than character vectors
+  require(Biostrings)
+  dna <- DNAString(primer) 
+  orients <- c(Forward = dna, Complement = complement(dna), Reverse = reverse(dna), 
+               RevComp = reverseComplement(dna))
+  # Convert back to character vector
+  return(sapply(orients, toString))  
+}
+
+#store the fwd and reverse oreintations separately
+FWD.orients <- allOrients(FWD)
+REV.orients <- allOrients(REV)
+
+#view the orientations of the primers
+FWD.orients
+```
+
+```{r}
+REV.orients
+
+```
+
+# search for Primers
+
+```{r}
+primerHits <- function(primer, fn) {
+  # Counts number of reads in which the primer is found
+  nhits <- vcountPattern(primer, sread(readFastq(fn)), fixed = FALSE)
+  return(sum(nhits > 0))
+}
+
+rbind(FWD.ForwardReads = sapply(FWD.orients, primerHits, fn = fnFs.filtN[[1]]), 
+      FWD.ReverseReads = sapply(FWD.orients, primerHits, fn = fnRs.filtN[[1]]), 
+      REV.ForwardReads = sapply(REV.orients, primerHits, fn = fnFs.filtN[[1]]), 
+      REV.ReverseReads = sapply(REV.orients, primerHits, fn = fnRs.filtN[[1]]))
+
+```
+
+At this point a 4X4 table is returned. If all the numbers are 0, then you don’t have primers in your sequences :) If they have numbers, use cutadapt to remove the primers, appropriately. If there are only hits of the reverse complement in the FWD.ReverseReads and the REV.ForwardReads, that is ok - it indicates that the reads are long enough to get the primers on the end. We can trim those out with the MergePairs function later, by adding trimOverhang=T.
+
+# Inspect read quality profiles 
+
+You should look at least some of the quality profiles to assess the quality of the sequencing run.
+
+## Forward reads
+
+```{r fig.height=10, fig.width=12}
+plotQualityProfile(fnFs.filtN[1:12])
+```
+In gray-scale is a heat map of the frequency of each quality score at each base position. The mean quality score at each position is shown by the green line, and the quartiles of the quality score distribution by the orange lines. 
+
+The DADA2 Tutorial advises trimming the last few nucleotides to avoid less well-controlled errors that can arise there. These quality profiles do not suggest that any additional trimming is needed. We will truncate the forward reads at position 240 (trimming the last 10 nucleotides).
+
+## Reverse reads
+
+
+```{r fig.height=10, fig.width=12}
+plotQualityProfile(fnRs.filtN[1:12])
+```
+
+Typically, the reverse reads will often be poorer quality than the forward reads, particular at the ends. Use this information to decide where to uniformly trim your reads. If you have low quality scores throughout the reads, then you may want to resequence your samples
+
+The reverse reads are of worse quality, especially at the end, which is common in Illumina sequencing. This isn’t too worrisome, as DADA2 incorporates quality information into its error model which makes the algorithm robust to lower quality sequence, but trimming as the average qualities crash will improve the algorithm’s sensitivity to rare sequence variants. Based on these profiles, we will truncate the reverse reads at position 150 where the quality distribution crashes.
+
+# Filtering and Trimming
+
+
+
+
+
