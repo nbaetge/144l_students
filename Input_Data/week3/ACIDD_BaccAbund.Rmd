@@ -6,7 +6,7 @@ output: github_document
 ---
 # Intro
 
-This document shows how **individual bottl** bacterial abundance data from ACIDD experiements were procesed, quality controlled, and analyzed.
+This document shows how **individual bottle** bacterial abundance data from ACIDD experiements were procesed, quality controlled, and analyzed.
 
 ```{r, message=FALSE, warning=FALSE}
 library(tidyverse)
@@ -38,6 +38,8 @@ joined <- left_join(metadata, data)
 # names(joined)
 # summary(joined)
 glimpse(joined)
+
+
 ```
 
 # Prepare Data
@@ -57,7 +59,7 @@ cells <- joined %>%
          hours = interv /3600,
          days = hours/24) %>%
   ungroup() %>%
-  select(Experiment:Nutrient_Sample, hours, days, cells:sd_cells) %>%
+  select(Experiment:Location, Bottle:Nutrient_Sample, hours, days, cells:sd_cells) %>%
   drop_na(cells)
 
 ```
@@ -134,7 +136,7 @@ This plot makes it a little easier to see, with the data that we have, where exp
 -SD Bottle D ~2-3 d (T3-T4)
 
 -SB Bottle A ~0.5-1 d (T1-T2)
--SB Bottle D ~0.5-2 d (T1-T3)
+-SB Bottle B ~0.5-2 d (T1-T3)
 -SB Bottle C ~1-3 d (T2-T4)
 -SB Bottle D ~1-3 d (T2-T4)
 
