@@ -1,0 +1,281 @@
+---
+title: '144L week #3 notes'
+author: "Kerri Luttrell"
+date: "11/1/2020"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+
+setwd("~/Github/144l_students")
+```
+
+# Intro
+
+This document shows how **individual bottle** TOC/DOC data from ACIDD remineralization experiments were processed, QC'ed , adn analyzed.
+
+```{r, warning= FALSE, message= FALSE}
+library (tidyverse)
+library(readxl)
+library(lubridate)
+library(broman)
+
+library(plyr)
+```
+
+```{r}
+excel_sheets("~/Github/144l_students/Input_Data/week4/ACIDD_Exp_TOC.xlsx")
+
+metadata <- read_excel("~/Github/144l_students/Input_Data/week4/ACIDD_Exp_TOC.xlsx", sheet = "Metadata")
+
+data <- read_excel("~/Github/144l_students/Input_Data/week4/ACIDD_Exp_TOC.xlsx", sheet= "Data")
+
+```
+
+```{r}
+glimpse(metadata)
+#84 rows, 18 columns
+```
+
+```{r}
+glimpse(data)
+# 76 rows, 7 columns
+view(data)
+```
+TOC: samples taken directly from bottle incubations
+PTOC: samples sacrificially taken from incubation vials (goes beyond duration of bottle samples)
+
+#Prepare Data
+
+```{r warning= F}
+joined <-  left_join (metadata, data)
+toc <-  joined %>%
+ mutate(Datetime = ymd_hm(Datetime))%>%
+  group_by (Experiment, Bottle)%>%
+  mutate ( interv = interval(first(Datetime), Datetime),
+                hours = as.numeric(interv)/3600,
+                days = hours/24) %>%
+  ungroup() %>%
+    dplyr::rename(sd_TOC = TOC_sd,
+         sd_PTOC = PTOC_sd)%>%
+  select(Experiment:Datetime, hours, days, everything(), -c(contains("Sample")))
+   glimpse(toc)
+
+```
+
+```{r}
+glimpse(toc)
+#84 rows, 17 columns
+```
+
+# PLot the curves
+
+## Pivot data
+
+```{r}
+pivot_toc <- toc %>% 
+  select(Experiment, Location, Bottle, Treatment, days, TOC, PTOC) %>%
+  pivot_longer(TOC:PTOC, names_to = "sample", values_to = "value")
+
+# used pivot longer to expand number of rows and decrease the number of columns
+
+pivot_toc_sd <- toc %>%
+   select(Experiment, Location, Bottle, Treatment, days, sd_TOC, sd_PTOC) %>%
+  pivot_longer(sd_TOC:sd_PTOC, names_to = "sample", names_prefix= "sd_", values_to = "sd")
+
+pivoted <- left_join (pivot_toc,pivot_toc_sd) %>%
+  mutate(sample = ifelse(sample=="TOC", "Bottle", "Vial"))
+#this mutate replaced the data input in the column with news names/proxies, whereas rename renames the columns
+```
+
+```{r}
+custom.colors <- c("Control"= "Cadet Blue", "Ash Leachate"="Perwinkle", "Santa Barbara" = "Wistera", "San Diego" = "Orchid", "Vial"= "lightcyan4", "Bottle"= "lightcoral")
+
+levels <- c("Control", "Ash Leachate", "San Diego", "Santa Barbara", "Bottle", "Vial")
+
+pivoted %>%
+  filter (Location == "Santa Barbara") %>%
+  drop_na (value) %>%
+  mutate(Treatment = factor(Treatment, levels = levels), sample = factor(sample, levels = levels))%>%
+  ggplot(aes(x =days, y = value, group = interaction(Treatment, Bottle)))+
+  geom_errorbar(aes(ymin = value - sd, ymax = value + sd, color = sample), width = 0.4)+
+  geom_point(aes(fill = sample ), size = 3, shape = 21, alpha = 0.7)+
+  labs (x = "Days", y = expression ("Total Organic Carbon , µmol C L"^-1), colro = "", fill= "") +
+  scale_color_manual(values = custom.colors)+
+  scale_fill_manual(values= custom.colors)+
+  theme_bw()+
+  facet_grid(rows = "Treatment", scales = "free")+
+  guides (color=F)
+
+```
+The analytical detection limit for our TOC analysis is -1.5 µmol C L^-1^.
+
+# TOC v PTOC (bottle v vial samples)
+we want to make sure that samples taken from bottle and vial at same time point are similar
+
+```{r}
+
+library(lmodel2)
+#lmodel2 is used when neither x or y variable are controlled or dependent on each other, both have error surrounding measurements
+reg.data <- toc %>% 
+  drop_na(TOC)%>%
+  filter(Timepoint >0)
+#TOC measurement at initial timepoint is same between bottol and vial so we only care about timepoints greater than 0
+
+reg <- lmodel2(PTOC ~TOC, data = reg.data, nperm =90)
+#this places toc values on x axis and ptoc on y axis, n perm stands for number of times the statistical model is run
+```
+```{r}
+reg
+```
+```{r}
+intercept <-  reg$regression.results[3,2]
+slope <-  reg$regression.results[3,3]
+
+two_int <- reg$confidence.intervals[3,2]
+two_slope <- reg$confidence.intervals[3,4]
+nine_int <-  reg$confidence.intervals[3,3]
+nine_slope <- reg$confidence.intervals[3,5]
+```
+
+```{r, fig.height=4,fig.width=5}
+reg.data%>%
+  ggplot(aes( x = TOC, y = PTOC)) +
+  geom_errorbar(aes(ymin = PTOC - sd_PTOC, ymax = PTOC + sd_PTOC), width = 0.05) +
+  geom_point(fill = "white", shape = 21, size =4, alpha =0.7) +
+  geom_abline(intercept = intercept, slope = slope, color = "black", linetype= 2, size = 1)+
+  geom_abline(intercept = two_int, slope= two_slope, color = "black", linetype = 3 , size = 1)+
+    geom_abline(intercept = nine_int, slope = nine_slope, color = "black", linetype = 3, size = 1) +
+    labs(x = expression ("Bottle TOC, µmol C L"^-1), y = expression ("Vial TPC µmul C L " ^-1))+
+    theme_bw()+
+    annotate ( geom = "text", label = expression (atop("y= 0.72x + 19.8", paste ("r"^2," =0.97," , italic("p "), "=0.01"))), x =70,y=74,size=4)
+  
+```
+
+good linear fit between two parameters but there is about a 28% difference between coressponding measurements when they are different. However this 28% limit is within the detection limit of the methodology (1.5) so they are not significantly different form one another.
+
+
+```{r}
+bc <-  read_rds("~/Github/144l_students/Input_Data/week3/ACIDD_Exp_Processed_BactAbund.rds")
+```
+
+```{r}
+
+merge <- left_join(toc, bc %>% select(-c(Datetime, days, hours)))%>%
+  select (Experiment:days, TOC:sd_PTOC, cells:diff_ln_cells, bc, ave_bc, sd_bc, everything(), -c(contains("Sample")) ) %>%
+  group_by(Experiment, Treatment, Bottle) %>%
+  fill(exp_start:sd_lag) %>%
+  ungroup()
+
+glimpse(merge)
+
+subset <- merge %>%
+  select(Experiment, Treatment, Bottle, days, PTOC, bc)
+```
+
+
+```{r}
+
+library(zoo)
+```
+
+We only want to interpolate within an experiment and not across experiments, so we'll perform the interpolation by using the split-apply-combine strategy.
+
+-split the dataframe into a list of its elements
+-apply the interpolation function to each of the list elements
+-combine the results into a new dataframe
+
+##Split
+
+```{r}
+to_interpolate <- merge %>%
+  select(Experiment, Bottle, Timepoint, days, PTOC, bc) %>%
+  group_by(Experiment, Bottle) # first we'll define the grouping of our dataframe
+
+list <- to_interpolate %>%
+  group_split() #then we can convert the dataframe into a list, broken up by the groups (list elements)
+
+keys <-  to_interpolate %>%
+  group_keys() %>%
+  mutate(key = paste(Experiment, Bottle))
+
+names(list) <- keys$key
+           
+```
+
+## Write the function
+
+```{r}
+interp.func <- function(x) {
+  y <-  zoo(x, order.by = x$days) #orders observations
+  interp_toc <- round(as.numeric(na.approx(y$PTOC, na.rm = F)), 1) #interpolates toc
+  interp_bc <- round(as.numeric(na.approx(y$bc, na.rm = F)), 1)
+  z <- cbind(y, interp_toc, interp_bc) #combines the columnes
+  as_tibble(z) #convert to dataframe
+}
+```
+
+## Apply and Combine
+
+```{r}
+interpolated <- lapply(list, interp.func) %>%
+  plyr::ldply(., as.data.frame) %>%
+  select(-c(.id, PTOC, bc, days)) %>%
+  mutate_at(vars(Timepoint:interp_bc), as.numeric) %>%
+  left_join(merge, .)
+```
+```{r}
+glimpse(interpolated)
+```
+
+# Estimate DOC, Bioavailability, BGEs
+
+```{r}
+doc <- interpolated %>% 
+  mutate (doc = interp_toc - interp_bc) %>%
+  group_by (Experiment, Bottle) %>% 
+  mutate (bioav_doc = (first(doc) - last(na.omit(doc)))/first(doc),
+           doc_exp_end = ifelse(Timepoint == exp_end, doc, NA),
+           delta_doc = first (doc) - doc_exp_end,
+           tdelta_doc = first(doc) - last(na.omit(doc)),
+           bge = ifelse(delta_bc > 1.5, delta_bc/delta_doc, NA)) %>%
+            fill (doc_exp_end:bge, .direction = "downup") %>%
+           ungroup()
+
+subset <- doc %>% 
+  select(Experiment, Bottle, Timepoint, exp_end, days, doc, bioav_doc, doc_exp_end, delta_doc, tdelta_doc, bge)%>%
+  filter(Experiment == "ASH172")
+
+glimpse(doc)
+```
+
+# Treatment averages
+
+```{r}
+averages <-  doc %>%
+group_by (Experiment, Treatment, Timepoint) %>%
+  mutate(ave_toc = mean(PTOC),
+         sd_toc = sd(PTOC)) %>%
+  ungroup()%>%
+  group_by(Experiment, Treatment) %>%
+  mutate(ave_bioav_doc = mean (bioav_doc),
+         sd_bioav_doc = sd(bioav_doc),
+         ave_delta_doc = mean(delta_doc),
+         sd_delta_doc = sd(delta_doc),
+         ave_tdelta_doc = mean(tdelta_doc),
+         sd_tdelta_doc = sd(tdelta_doc),
+         ave_bge = mean(bge),
+         sd_bge = sd(bge))%>%
+  ungroup()
+
+subset <-  averages %>%
+  filter (Experiment == "ASH172") %>%
+  select (Experiment, Treatment, Bottle, Timepoint, PTOC, ave_toc:sd_bge)
+```
+
+
+
+
+
+
+
