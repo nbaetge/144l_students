@@ -322,14 +322,19 @@ relabund <- sweet.tab %>%
 relaheat.data <- relabund %>% 
   select(-c(sample, Experiment, Location, Bottle, days, cells)) %>%
   pivot_longer(.,-c(Treatment:Timepoint), names_to = "taxa", values_to = "relabund") %>% 
-  separate(taxa, into = c("p", "c", "o"), sep = " _ ") 
+  separate(taxa, into = c("p", "c", "o"), sep = " _ ") %>% 
+  group_by(Treatment, Timepoint, p, c, o) %>% 
+  mutate(mean_relabund = mean(relabund, na.rm = T)) %>% 
+  ungroup() %>% 
+  select(-relabund) %>% 
+  distinct()
 
 # install.packages("viridis")
 library(viridis)
 
 relaheat <- relaheat.data %>%
   ggplot(aes(x = Timepoint, y = o)) +
-  geom_tile(aes(fill = relabund), color = "white") +
+  geom_tile(aes(fill = mean_relabund), color = "white") +
   scale_fill_viridis(option = "D") +
   labs(x = "Timepoint", y = "Order", fill = "Relative Abundance") +
 facet_grid(~factor(Treatment, levels = levels)) +
@@ -358,3 +363,29 @@ saveRDS(alphadiv, "~/GITHUB/144l_students/Output_Data/week6/alphadiv.rds")
 ```
 
 
+# Stacked Barplots
+
+```{r echo = FALSE, warning = FALSE, message = FALSE, fig.height = 8, fig.width = 8, fig.align = "center"}
+
+relabar.data <- relabund %>% 
+  select(-c(sample, Experiment, days, cells)) %>%
+  pivot_longer(.,-c(Location:Timepoint), names_to = "taxa", values_to = "relabund") %>% 
+  group_by(Treatment, Timepoint, taxa) %>% 
+  mutate(mean_relabund = mean(relabund, na.rm = T)) %>% 
+  ungroup() %>% 
+  separate(taxa, into = c("p", "c", "o"), sep = " _ ") %>% 
+  select(Treatment, Timepoint, p, c, o, mean_relabund) %>% 
+  distinct() 
+
+# Plot 
+
+relabar.data %>% 
+  mutate(Timepoint = as.character(Timepoint)) %>% 
+  ggplot(., aes(x =  Timepoint, y = mean_relabund)) + 
+  geom_bar(aes(fill = o), color = "black", stat = "identity", position = "stack", width = 0.25, stroke = 1) +
+ # scale_fill_manual(values = cal_palette("figmtn", n = 19, type = "continuous")) +
+  labs(x = "Timepoint", y = "Relative Abundance") +
+  theme_bw() +
+  guides(fill = guide_legend(reverse = TRUE, keywidth = 1, kerheight = 1, title = "Order")) +
+  facet_grid(~factor(Treatment, levels = levels))
+```
