@@ -16,11 +16,12 @@ setwd("~/Github/144l_students")
 This document shows how **individual bottle** TOC/DOC data from ACIDD remineralization experiments were processed, QC'ed , adn analyzed.
 
 ```{r, warning= FALSE, message= FALSE}
+#load plyr before tidyverse (packages have conflicts)
 library (tidyverse)
 library(readxl)
 library(lubridate)
-library(broman)
-library(plyr)
+library(wesanderson)
+
 ```
 
 ```{r}
@@ -56,7 +57,7 @@ toc1 <-  joined1 %>%
                 hours = as.numeric(interv)/3600,
                 days = hours/24) %>%
   ungroup() %>%
-    dplyr::rename(sd_TOC = TOC_sd,
+    rename(sd_TOC = TOC_sd,
          sd_PTOC = PTOC_sd)%>%
   select(Experiment:Datetime, hours, days, everything(), -c(contains("Sample")))
    glimpse(toc1)
@@ -90,7 +91,7 @@ pivoted1 <- left_join (pivot_toc1,pivot_toc_sd1) %>%
 ```
 
 ```{r}
-custom.colors <- c("Control"= "Cadet Blue", "Ash Leachate"="Perwinkle", "Mud Leachate" = "Wistera", "Glucose_NItrate_Phosphate" = "Orchid", "Vial"= "lightcyan4", "Bottle"= "lightcoral")
+custom.colors <- c("Control"= "Cadet Blue", "Ash Leachate"="darkslateblue", "Mud Leachate" = "cornflowerblue", "Glucose_Nitrate_Phosphate" = "darkgoldenrod2", "Vial"= "lightcyan4", "Bottle"= "lightcoral")
 
 levels <- c("Control", "Ash Leachate", "Mud Leachate", "Glucose_Nitrate_Phosphate", "Bottle", "Vial")
 
@@ -108,7 +109,7 @@ pivoted1 %>%
   guides (color=F)
 
 ```
-The analytical detection limit for our TOC analysis is -1.5 µmol C L^-1^. Samoles from bottle and vial taken at same time points in same treatmenet look relativiely similar, although some have a high standarad deviation.
+**Fig 1** The analytical detection limit for our TOC analysis is -1.5 µmol C L^-1^. Samples from bottle and vial taken at same time points in same treatmenet look relativiely similar, although some have a high standarad deviation. Both the bottles and the vials showed the same net negative trend in TOC over the course of the experiemnt. From this graph I would infer that there is no significant difference between the heterotrophic community and carbon consuming processes in the bottles and the vials. A linear model can be used to test this hypothesis.
 
 # TOC v PTOC (bottle v vial samples)
 we want to make sure that samples taken from bottle and vial at same time point are similar
@@ -149,11 +150,11 @@ reg.data1%>%
     geom_abline(intercept = nine_int1, slope = nine_slope1, color = "black", linetype = 3, size = 1) +
     labs(x = expression ("Bottle TOC, µmol C L"^-1), y = expression ("Vial TPC µmul C L " ^-1))+
     theme_bw()+
-    annotate ( geom = "text", label = expression (atop("y= 1.03x - 2.1", paste ("r"^2," =0.92," , italic("p "), "=0.01"))), x= 75, y=78, size=4)
+    annotate ( geom = "text", label = expression (atop("          y= 1.03x - 2.1", paste ("             r"^2," =0.92," , italic("p "), "=0.01"))), x= 75, y=78, size=4)
   
 ```
 
-good linear fit between two parameters but there is about a 28% difference between coressponding measurements when they are different. However this 28% limit is within the detection limit of the methodology (1.5) so they are not significantly different form one another.
+**Fig 2** There is a good linear fit between two parameters with a high r^2 value. Thus, 92% of the variation in the Vial treatment is accounted for by variation in the Bottle. I would conclude that any difference between the bottle and vial would be well withing the 1.5 detection limit, so both measurements are viable for data analysis.
 
 
 ```{r}
@@ -242,14 +243,14 @@ doc1 <- interpolated1 %>%
    mutate (doc = interp_toc - interp_bc)%>%
    group_by (Treatment, Bottle) %>% 
   mutate(doc_exp_end = ifelse(Timepoint == exp_end, doc, NA)) %>%
-   mutate( delta_doc = first (doc) - doc_exp_end)%>%
+  mutate( delta_doc = first (doc) - doc_exp_end)%>%
   mutate(bioav_doc = (delta_doc/first(doc)))%>%
   mutate(tdelta_doc = first(doc) - last(na.omit(doc))) %>%
   mutate(bge = ifelse(delta_bc > 1.5, delta_bc/delta_doc, NA)) %>%
             fill (doc_exp_end:bge, .direction = "downup") %>%
            ungroup()
 
-subset1 <- doc1 %>% 
+subset <- doc1 %>% 
   select(Experiment,Treatment, Bottle, Timepoint, exp_end, days,doc, bioav_doc, doc_exp_end, delta_doc, tdelta_doc, bge)
 
 glimpse(doc1)
@@ -261,7 +262,7 @@ glimpse(doc1)
 
 ```{r}
 averages1 <-  doc1 %>%
-group_by (Experiment, Treatment, Timepoint) %>%
+group_by ( Timepoint, Treatment) %>%
   mutate(ave_toc = mean(PTOC),
          sd_toc = sd(PTOC)) %>%
   ungroup()%>%
@@ -280,8 +281,82 @@ subset <-  averages1 %>%
   select (Experiment, Treatment, Bottle, Timepoint, PTOC, ave_toc:sd_bge)
 
 glimpse(subset)
-#80 rows and 15 columns STILL NO BGE
+#80 rows and 15 columns
 ```
+
+```{r}
+gp2 <- wes_palettes$FantasticFox1
+#create an object with color palette in order to subset colors 2:5 from wes pallette instead of automaticllay filling 1-4
+ 
+
+averages1 %>%
+  mutate(Treatment = factor(Treatment, levels= levels)) %>%
+  drop_na(ave_toc) %>%
+  ggplot(aes(x =days, y =ave_toc, group = interaction( Treatment))) +
+  geom_errorbar(aes(ymin = ave_toc - sd_toc, ymax = ave_toc + sd_toc, color=Treatment), width=0.4)+
+  geom_point(aes(fill =Treatment), size= 3, shape=21, alpha=0.7)+
+  geom_line(aes(color = Treatment), size=1,alpha=0.7 )+
+  scale_color_manual(values=gp2[2:5]) + 
+    scale_fill_manual(values=gp2[2:5])+
+labs (x = "Days", y = expression("Total Organic Carbon, µmol C L"^-1), color ="", fill = "")+
+  theme_bw()+
+  facet_grid(rows = "Treatment", scales= "free")+
+  guides(color= F)
+```
+**Fig.3** This graph shows the average Total Organic Carbon (µmol C L^-1) over time in all treatments. Ash Leachate and GNP both have a steep initial decline in TOC and have a larger net decrease in TOC than both the control and the mud leachate. The mud leachate is peculiar in that TOC increases over the first 2 days and is followed by a shallow decrease. While, the control steadily decreases over time, the magnitude of the change in TOC is much less than that of GNP or Ash Leachate. 
+
+```{r}
+bar.data1 <- averages1%>%
+  select( Treatment, ave_bioav_doc:sd_bge)%>%
+  distinct()
+```
+
+```{r} 
+deltadoc1 <- bar.data1%>%
+  ggplot(aes(x= factor(Treatment,levels = levels), y=ave_delta_doc))+
+  geom_col(color = "black", fill= "white", alpha = 1)+
+  geom_errorbar(aes(ymin = ave_delta_doc - sd_delta_doc, ymax = ave_delta_doc + sd_delta_doc), width=0.1,   size = 0.5)+
+  labs(x="", y= expression(paste("∆DOC")), color="")+
+  theme_bw()+
+  guides(fill=F)
+
+```
+```{r} 
+tdeltadoc1 <- bar.data1%>%
+  ggplot(aes(x= factor(Treatment,levels = levels), y=ave_tdelta_doc))+
+  geom_col(color = "black", fill= "white", alpha = 1)+
+  geom_errorbar(aes(ymin= ave_tdelta_doc-sd_tdelta_doc, ymax = ave_tdelta_doc + sd_tdelta_doc), width=0.1,   size = 0.5)+
+  labs(x="", y= expression(paste("Total ∆DOC")), color="")+
+  theme_bw()+
+  guides(fill=F)
+
+```
+```{r} 
+bioav1 <- bar.data1%>%
+  ggplot(aes(x= factor(Treatment,levels = levels), y=ave_bioav_doc))+
+  geom_col(color = "black", fill= "white", alpha = 1)+
+  geom_errorbar(aes(ymin= ave_bioav_doc - sd_bioav_doc, ymax = ave_bioav_doc + sd_bioav_doc), width=0.1,   size = 0.5)+
+  labs(x="", y= expression(paste("Bioavailable DOCFraction")), color="")+
+  theme_bw()+
+  guides(fill=F)
+
+```
+
+```{r} 
+bge1 <- bar.data1%>%
+  ggplot(aes(x= factor(Treatment,levels = levels), y=ave_bge))+
+  geom_col(color = "black", fill= "white", alpha = 1)+
+  geom_errorbar(aes(ymin= ave_bge - sd_bge, ymax = ave_bge + sd_bge), width=0.1,   size = 0.5)+
+  labs(x="", y= expression(paste("Bacterial Growth Efficiency")), color="")+
+  theme_bw()+
+  guides(fill=F)
+
+```
+```{r fig.height=7, fig.width=10}
+library (patchwork)
+bge1+ bioav1+deltadoc1+tdeltadoc1 + plot_annotation(tag_levels = "a")
+```
+**Fig 4** These bar plots show (a) Bacterial Growth Efficiency, (b) Bioavailable DOC Fraction, (c) ∆DOC, and Total ∆DOC for each of the four treatments. Bacterial growth efficiency was below th 1.5 detection limit for Control and Mud Leachate, so we did not include them in the graphs. Ash Leachate had the highest BGE, so we can conclude that the Carbon in the ash leachate supported the greatest amount of new bacterial biomass per unit Carbon. However, GNP had the highest ∆DOC and bioavailable DOC Fraction. This makes sense considering last weeks graphs in which the Ash Leachate had the steepest initial increase in bacterial biomass, but GNP had the highest maximum bacterial biomass. Thus, even though the Carbon consumed from Ash Leachate supported a high growth and assimilation rate, the over amount of carbon available for use was higher in the GNP. However, one might also speculate that it was not the type of carbon that halted DOC consumption in the Ash Leachate, but the availability of other nutrients. In the GNP, the bacteria are given the "perfect medium" and are not limited by nitrogen or phosphorus. If there was a nitrogen or phosphoruse limitation in the Ash Leachate, this may be responsible its lower ∆DOC. The Control, followed by the Mud leachate, had much lower ∆DOC, Total ∆DOC, and bioavailable DOC Fraction. This makes sense as no additional carbon input was given. The change in DOC and bioavailable DOC fraction in the mud leachate is much lower than hypothesized. Upon reflection, the carbon in the Mud Leachate was not isolated from bacterial communities prior to its entry into the marine ecosystem. Thus, the Carbon remaining in this substrate would have been less labile resulting in the low numbers.
 
 
 

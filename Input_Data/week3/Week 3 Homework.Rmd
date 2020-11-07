@@ -277,5 +277,8 @@ theme = theme(
  
  Although Ash Leachate had the fastest doubling time and highest specific growth rate, the GNP treatment produced a greater change in bacterial carbon. Despite allowing for quick growth, it is possible that the ash leachate carbon source is either not as bioavailable as glucose or the ash leachate media lacks the necessary nitrogen and phosphorus for complete utilization of the carbon source. The control, which had no additional carbon input, showed the least amount of bacterial carbon produced, lowest µ, and slowest doubling time. This result is consistent with good experimental design.
 
-
+```{r}
+saveRDS(averages, "~/Github/144l_students/Input_Data/week3/Homework_Processed_BactAbund.rds")
+```
+```
 

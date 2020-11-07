@@ -55,9 +55,12 @@ cells <- joined %>%
          cells = Cells_ml * 1000,
          sd_cells = Cells_ml_sd * 1000) %>%
   group_by(Experiment, Treatment, Bottle) %>%
-  mutate(interv = interval(first(Datetime), Datetime),
-         hours = interv /3600,
-         days = hours/24) %>%
+  ungroup()%>%
+  mutate(Datetime = ymd_hm(Datetime))%>%
+  group_by (Experiment, Bottle)%>%
+  mutate ( interv = interval(first(Datetime), Datetime),
+                hours = as.numeric(interv)/3600,
+                days = hours/24) %>%
   ungroup() %>%
   select(Experiment:Location, Bottle:Nutrient_Sample, hours, days, cells:sd_cells) %>%
   drop_na(cells)
@@ -293,7 +296,7 @@ library(patchwork)
 ```
 
 ```{r fig.height=6, fig.width=8}
-lag + delta_bc + mew + doubling + plot_annotation(tag_levels = "a")
+#lag + delta_bc + mew + doubling + plot_annotation(tag_levels = "a")
 
 ```
 
