@@ -174,7 +174,7 @@ out1 <- filterAndTrim(fnFs1, filtFs1, fnRs1, filtRs1, truncLen = c(200,150),  ma
 #truncLen this is where we actually want to trim our reads, respectively
 
 # look at the output. this tells you how many reads were removed. 
-out1
+
 ```
 
 Reads out is lower than reads in, signifying function worked and "error" reads were removed. Sample 144_B0_S9-L001_R1_001.fastq had over 11000 reads removed reflective of its poor quality.
