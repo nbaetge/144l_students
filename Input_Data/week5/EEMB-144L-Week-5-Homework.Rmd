@@ -1,0 +1,305 @@
+---
+title: "EEMB 144L Week 5 Homework"
+author: "Kerri Luttrell"
+date: "11/11/2020"
+output: github_document
+---
+
+
+This script processes trimmed (w/o primers) sequences through the [DADA2 pipline (v 1.16)](https://benjjneb.github.io/dada2/tutorial.html), which can be installed following these [steps](https://benjjneb.github.io/dada2/dada-installation.html) 
+
+# Install and Load DADA 2 and ShortRead Bioconducter
+
+```{r setup, include=FALSE}
+# if (!requireNamespace("BiocManager", quietly = TRUE))
+# install.packages("BiocManager")
+# BiocManager::install(version = "3.11")
+# 
+# if (!requireNamespace("BiocManager", quietly = TRUE))
+#     install.packages("BiocManager")
+# BiocManager::install("GenomeInfoDbData")
+# BiocManager::install("dada2", version = "3.11")
+# BiocManager::install("ShortRead")
+
+```
+
+```{r, include=FALSE}
+##install.packages("Rcpp") try this if later stuff doesn't work
+library (dada2)
+library(ShortRead)
+library(tidyverse)
+```
+
+# Import File names
+
+```{r}
+path1 <- "~/Github/144l_students/Input_Data/week5/EEMB144L_2018_fastq"
+#2 files for each sample
+fnFs1 <- list.files(path1, pattern ="_R1_001.fastq", full.names= TRUE)
+fnRs1 <- list.files(path1, pattern ="_R2_001.fastq", full.names= TRUE)
+
+```
+
+# Retrieve orientation of primers
+
+```{r eval=FALSE, include=FALSE}
+# The primers targeted the V4 region and are known 514F-Y and 806RB primers (see Apprill et al., 2015)[http://www.int-res.com/articles/ame_oa/a075p129.pdf]
+# 
+# Primers must be removed for DADA2 to analyze sequences.
+```
+
+
+
+```{r}
+#store the  forward and reverse primers
+FWD1 = "GTGYCAGCMGCCGCGGTAA"
+REV1 = "GGACTACNVGGGTWTCTAAT"
+
+#now store all the orientations of your forward and reverse  primers
+
+allOrients1 <- function(primer) {
+  # The Biostrings works w/ DNAString objects rather than character vectors
+  require(Biostrings)
+  dna1 <- DNAString(primer) 
+  orients1 <- c(Forward = dna1, Complement = complement(dna1), Reverse = reverse(dna1), 
+               RevComp = reverseComplement(dna1))
+  # Convert back to character vector
+  return(sapply(orients1, toString))  
+}
+
+#store the fwd and reverse oreintations separately
+FWD.orients1 <- allOrients1(FWD1)
+REV.orients1 <- allOrients1(REV1)
+
+#view the orientations of the primers
+FWD.orients1
+```
+
+```{r}
+REV.orients1
+```
+
+# search for Primers
+
+```{r}
+primerHits1 <- function(primer, fn) {
+  # Counts number of reads in which the primer is found
+  nhits1 <- vcountPattern(primer, sread(readFastq(fn)), fixed = FALSE)
+  return(sum(nhits1 > 0))
+}
+#function looks for forward and reverse "hit" sequences and returns a vector for the results of each of these -> tally for amt per hit and then we make a table with output 
+
+rbind(FWD.ForwardReads1 = sapply(FWD.orients1, primerHits1, fn = fnFs1[[1]]), 
+      FWD.ReverseReads1 = sapply(FWD.orients1, primerHits1, fn = fnRs1[[1]]), 
+      REV.ForwardReads1 = sapply(REV.orients1, primerHits1, fn = fnFs1[[1]]), 
+      REV.ReverseReads1 = sapply(REV.orients1, primerHits1, fn = fnRs1[[1]]))
+```
+There are hits of the FWD.ReverseReads1 and the REV.ForwardReads1 in the Rev Comp, so we will trim those out later with the MergePairs function, by adding Overhang=T.
+
+```{r eval=FALSE, include=FALSE}
+# There are only hits of the reverse complement in the FWD.ReverseReads1 and the REV.ForwardReads1, that is ok - it indicates that the reads are long enough to get the primers on the end. We can trim those out with the MergePairs function later, by adding trim Overhang=T.
+
+```
+
+# Inspect read quality profiles 
+
+Quality profiles to assess the quality of the sequencing run.
+
+## Forward reads
+
+```{r fig.height=10, fig.width=12}
+plotQualityProfile(fnFs1[1:12])
+```
+```{r eval=FALSE, include=FALSE}
+# Since the graph goes to 250 cycles, the read length of our Illumina samples is 250 base pairs. Each cycle = base pair position. Y axis = higher the number the higher the quality of base pair. 
+# 
+# gray-scale= heat map of the frequency of each quality score at each base position. 
+# green line= mean quality score at each position  
+# orange line= quartiles of the quality score distribution 
+```
+
+All samples start to decline in quality above 200 bp. 
+Sample 144_B0_S9-L001_R1_001.fastq. has a sharp dropoff in quality at 110 bp. 
+
+Sample 144_C0_S12-L001_R1_001.fastq.has a more gradual, yet noticeable decline around 110 bp. However, it is not as severe as the previous sample, so we can probably keep it.
+
+Both of the samples with lower quality scores have fewer reads than the other samples. The lowest quality being in sample 144_B0_S9-L001_R1_001.fast, with just over 14,000 reads (compared to most samples ranging from 50-70k).
+
+We will truncate the forward reads at position 200 (trimming the last 10 nucleotides).
+
+## Reverse reads
+
+
+```{r fig.height=10, fig.width=12}
+plotQualityProfile(fnRs1[1:12])
+```
+
+```{r eval=FALSE, include=FALSE}
+# The reverse reads are of worse quality, especially at the end, which is common in Illumina sequencing.  DADA2 incorporates quality information into its error model which makes the algorithm robust to lower quality sequence, but trimming as the average qualities crash will improve the algorithm’s sensitivity to rare sequence variants. 
+
+```
+Lots of variability in quality, much lower quality than that of forward reads, as is expected. Right hand tail quality declines at ~160 bp. Left hand tail of samples has fairly low quality too. 
+Sample 144_B0_S9-L001_R2_001.fastq has noticeably poorer waulity than all other samples with about 50% of the quality score of other samples at any given time point.
+
+
+Based on these profiles, truncate the reverse reads at position 160 bp, where the quality distribution crashes.
+
+# Filtering and Trimming
+
+```{r}
+#Get the sample names
+#define the basename of the FnFs as the first part of each fastQ file name until "_L"
+#apply this to all samples
+sample.names1 <- sapply(strsplit(basename(fnFs1),"_L"), `[`,1)
+sample.names1
+#create a "filtered" folder in the working directory as a place to put all the new filtered fastQ files
+filt_path1 <- file.path(path1,"filtered")
+#add the appropriate designation string to any new files made that will be put into the "filtered" folder
+filtFs1 <- file.path(filt_path1, paste0(sample.names1, "_F_filt.fastq"))
+filtRs1 <- file.path(filt_path1, paste0(sample.names1, "_R_filt.fastq"))
+```
+
+```{r eval=FALSE, include=FALSE}
+# Below is the actual filtering step. We're using standard filtering parameters.
+# 
+# 1. dada2 generally advises trimming last few nucleotides for weird sequencing errors that can pop up there.
+# 
+# 2. maxEE is the max number of expected errors (calc'ed from Q's) to allow in each read. This is a probability calculation.
+# 
+# 3. minQ is a threshold Q - and read with a Q < minQ after truncating reads gets discarded. This isn't that important for 16/18S
+```
+
+```{r}
+out1 <- filterAndTrim(fnFs1, filtFs1, fnRs1, filtRs1, truncLen = c(200,150),  maxN = 0, maxEE = c(2,2), truncQ = 2, rm.phix = TRUE, compress = TRUE) 
+#truncLen this is where we actually want to trim our reads, respectively
+
+# look at the output. this tells you how many reads were removed. 
+out1
+```
+
+Reads out is lower than reads in, signifying function worked and "error" reads were removed. Sample 144_B0_S9-L001_R1_001.fastq had over 11000 reads removed reflective of its poor quality.
+
+# Learn the error rates
+
+```{r}
+errF1 <- learnErrors(filtFs1, multithread = TRUE)
+errR1 <- learnErrors(filtRs1, multithread = TRUE)
+```
+
+```{r eval=FALSE, include=FALSE}
+# The dada2 algorithm makes use of a parametric error model (err) as every amplicon dataset has a different set of error rates. This is what dada2 is all about. This step creates the parameters for designating unique sequences.
+# 
+# Each sequence has an x number of reads. dada2 uses the numbers of reads per sequence as well as the q-score to build this model. This algorithm assumes that your most abundant sequence is real. There is a very high probability that it is.
+# 
+# What the algorithim does that looks at each base pair of an individual sequence and calculates the probability that the base pair is an error based on the quality score of the read and the sequence of your most abundant read. It also does this for the second most abundant sequence, etc etc. hence the message "convergence after x rounds" after running the algorithm.
+``` 
+
+```{r echo = FALSE, warning = FALSE, message = FALSE, fig.height = 10, fig.width = 12, fig.align = "center", warning = FALSE}
+plotErrors(errF1, nominalQ = TRUE)
+```
+
+```{r echo = FALSE, warning = FALSE, message = FALSE, fig.height = 10, fig.width = 12, fig.align = "center", warning = FALSE}
+plotErrors(errR1, nominalQ = TRUE)
+```
+The estimated error rates are a pretty good fit for all and the observed error rates.
+
+```{r eval=FALSE, include=FALSE}
+# X= quality score Y axis= error rates
+# The error rates for each possible transition (A→C, A→G, …) are shown. Points are the observed error rates for each consensus quality score. The black line shows the estimated error rates after convergence of the machine-learning algorithm (model output). The red line shows the error rates expected under the nominal definition of the Q-score. Here the estimated error rates (black line) are a good fit to the observed rates (points), and the error rates drop with increased quality as expected. Everything looks reasonable and we proceed with confidence.
+# 
+# Negative slope of lines-->error rates drop when quality score increases
+```
+
+# Dereplication
+
+
+```{r}
+derepFs1 <- derepFastq(filtFs1, verbose = TRUE)
+derepRs1 <- derepFastq(filtRs1, verbose = TRUE)
+# Name the derep-class objects by the sample names
+names(derepFs1) <- sample.names1
+names(derepRs1) <- sample.names1
+```
+
+
+# Infer the sequence variants
+
+```{r eval=FALSE, include=FALSE}
+# Apply the core dada2 sample inference algorithm to the dereplicated data. 
+# 
+# Infer the sequence variants in each sample, taking out the sequence variants that have excessive error rates.
+# 
+# So here, we are applying the error models to the data. Before, the error models were run using a subset of the data (parameterizing). Now, we're using the parameters of the model and applying it to the whole data set to see which sequences are real and which are not. 
+```
+
+```{r}
+dadaFs1 <- dada(derepFs1, err = errF1, multithread = TRUE)
+dadaRs1 <- dada(derepRs1, err = errR1, multithread = TRUE)
+```
+
+
+
+I had hits of the reverse complement in the FWD.ReverseReads and the REV.ForwardReads,  trimedm them here by adding trimOverhang = T.
+
+```{r}
+mergers1 <- mergePairs(dadaFs1, derepFs1, dadaRs1, derepRs1, verbose = TRUE, trimOverhang = T)
+```
+
+
+
+```{r}
+head(mergers1[[1]])
+```
+All the nmatch are the same across samples because we uniformly trimmed the amplicons.
+
+```{r}
+saveRDS(mergers1, "~/Github/144l_students/Input_Data/week5/144L_dada_merged1.rds")
+
+```
+
+
+
+```{r}
+seqtab1 <- makeSequenceTable(mergers1)
+dim(seqtab1) # samples by unique sequence
+
+```
+
+
+```{r}
+table(nchar(getSequences(seqtab1))) 
+```
+
+# Remove the Chimeras
+
+
+
+```{r}
+seqtab.nochim1 <- removeBimeraDenovo(seqtab1, verbose = TRUE)
+dim(seqtab.nochim1)
+```
+
+
+
+```{r}
+sum(seqtab.nochim1)/sum(seqtab1)
+```
+99% of sequences are not chimeras.
+
+# Assign taxonomy using a reference database
+
+Here we are referencing the Silva database
+
+```{r}
+taxa1 <- assignTaxonomy(seqtab.nochim1,"~/Github/144l_students/Input_Data/week5/silva_nr_v138_train_set.fa", multithread = TRUE)
+```
+
+
+```{r}
+saveRDS(t(seqtab.nochim1), "~/Github/144l_students/Input_Data/week5/144L_seqtab-nochimtaxa.rds")
+saveRDS(taxa1,"~/Github/144l_students/Input_Data/week5/144L_taxa.rds")
+
+```
+
+
+Through the dada2 pipeline I created two tables, one including sequence assignmenets and one with all the taxa. When cleaning the sequence data, I plotted quality profiles of the forward and reverse reads. The significantly poorer quality and lower number of reads for Sample 144_B0_S9-L001_R1_001.fastq may be reason to discard it from future analysis. All other quality profiles performed as expected.The graphs for error rates had negative slopes and fit the points well, showing that error rates drop with increasing quality. This allowed me to proceed with confidence and create my tables.
