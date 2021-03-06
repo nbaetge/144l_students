@@ -1,0 +1,79 @@
+---
+title: "EEMB 150 Quiz 5"
+author: "Kerri Luttrell"
+date: "3/1/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+### *Anaerobic Oxidation of Methane*
+ 
+**Set up the half reactions**
+
+*oxidation half reaction*
+
+ $CH_4 + 2H_2O \rightarrow CO_2 + 8H^+ +8e^-$
+
+*reduction half reaction*
+
+ $2e^- +2H^+  \rightarrow H_2$
+ 
+ **Multiply reduction half reaction by 4**
+ 
+ $8e^- +8H^+ \rightarrow 4H_2$
+ 
+ **Cancel Out and Add**
+ 
+  $8H^+ \rightarrow 4H_2$
+  
+  $CH_4 + 2H_2O \rightarrow CO_2 + 8H^+$
+
+**Balanced Equation**
+
+ $CH_4 + 2H_2O \rightarrow 4H_2+ CO_2$
+ 
+```{r storing standard free energies}
+H_pH0 <- 0
+H_pH7 <- -39.83
+H2 <- 0
+sulfate <- -744.6
+sulfide <- -27.87
+CO2 <- -394.4
+water <- -237.17
+methane <- -50.75
+deltaGred <-  (4*(H2)+(CO2)) -  (water*2 + methane)
+deltaGred
+```
+### *Sulfate Reducing Bacteria*
+
+**Set up the half reactions**
+
+*oxidation half reaction*
+
+ $H_2\rightarrow2e^- +2H^+$
+
+*reduction half reaction*
+
+ $SO_4^{2-} + 10H^+ + 8e^- \rightarrow H_2S +4H_2O$
+ 
+ **Multiply oxidation half reaction by 4**
+ 
+ $4H_2\rightarrow8e^- +8H^+$
+ 
+ **Cancel Out and Add**
+ 
+ $4H_2\rightarrow  8H^+$
+  
+ $SO_4^{2-} + 10H^+ \rightarrow H_2S +4H_2O$
+
+**Balanced Equation**
+ $SO_4^{2-} + 2H^+ +4H_2\rightarrow H_2S +4H_2O$
+ 
+```{r}
+ deltaGox <-  (4*(water)+(sulfide)) -  (H2*4 + sulfate + 2*H_pH0)
+ deltaGox
+```
+ 
+ 
+ 
+ 
